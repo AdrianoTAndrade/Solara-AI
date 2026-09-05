@@ -12,7 +12,9 @@ export async function chamarApi(caminho: string, opcoes: RequestInit = {}) {
   if (session?.access_token) {
     cabecalhos.set("Authorization", `Bearer ${session.access_token}`);
   }
-  if (opcoes.body && !cabecalhos.has("Content-Type")) {
+  // FormData (upload de arquivo) define seu proprio Content-Type com o
+  // boundary do multipart — nao mexer nesse caso.
+  if (opcoes.body && !(opcoes.body instanceof FormData) && !cabecalhos.has("Content-Type")) {
     cabecalhos.set("Content-Type", "application/json");
   }
 
