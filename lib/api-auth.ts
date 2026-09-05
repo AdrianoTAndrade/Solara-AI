@@ -30,3 +30,20 @@ export async function exigirAdmin(req: Request) {
 
   return { usuario, perfil };
 }
+
+// Confere que o usuario autenticado tem a area indicada em perfis.areas.
+export async function exigirArea(req: Request, area: string) {
+  const usuario = await obterUsuarioDoPedido(req);
+  if (!usuario) return null;
+
+  const supabase = criarClienteServidor();
+  const { data: perfil, error } = await supabase
+    .from("perfis")
+    .select("id, papel, areas")
+    .eq("id", usuario.id)
+    .single();
+
+  if (error || !perfil || !perfil.areas?.includes(area)) return null;
+
+  return { usuario, perfil };
+}

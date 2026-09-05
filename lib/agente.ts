@@ -24,7 +24,34 @@ export type Contexto = {
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const MODELO = "claude-sonnet-4-6";
-const MAX_TOKENS = 2000;
+// SPEC 3.2 pede 2000, mas o Consolidador (e outros com bastante contexto)
+// as vezes escreve raciocinio antes do JSON e estourava esse limite no meio
+// da resposta, invalidando o JSON. Subimos para 4096 para dar espaco a isso
+// sem trocar de modelo nem mudar o formato esperado.
+const MAX_TOKENS = 4096;
+
+// O prompt pede "so JSON, sem texto antes ou depois", mas o modelo as vezes
+// foge disso: envolve a resposta em cerca de codigo (```json ... ```), ou
+// se autocorrige no meio (gera um JSON, escreve que errou, manda outro
+// corrigido depois). Extrai o JSON que deve valer:
+// - se houver blocos ```...```, usa o ULTIMO (autocorrecao manda o certo por
+//   ultimo);
+// - senao, tenta a fatia entre a primeira "{" e a ultima "}" do texto.
+function extrairJson(texto: string): string {
+  const blocos = [...texto.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((m) => m[1].trim());
+  if (blocos.length > 0) {
+    return blocos[blocos.length - 1];
+  }
+
+  const textoAparado = texto.trim();
+  const inicio = textoAparado.indexOf("{");
+  const fim = textoAparado.lastIndexOf("}");
+  if (inicio !== -1 && fim > inicio) {
+    return textoAparado.slice(inicio, fim + 1);
+  }
+
+  return textoAparado;
+}
 
 // Unica funcao pela qual todo agente passa. Nunca chamar a API da Anthropic
 // de outro lugar (SPEC 3.2 / CLAUDE.md).
@@ -78,7 +105,7 @@ export async function agente<TSaida = unknown>(
 
     let saida: TSaida;
     try {
-      saida = JSON.parse(textoResposta) as TSaida;
+      saida = JSON.parse(extrairJson(textoResposta)) as TSaida;
     } catch {
       throw new Error(
         `Resposta do agente ${papel} nao e JSON valido: ${textoResposta}`

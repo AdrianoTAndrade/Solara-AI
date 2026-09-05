@@ -38,18 +38,27 @@ function ultimaExecucao(execucoes: Execucao[], papel: string): Execucao | undefi
     .sort((a, b) => new Date(b.inicio).getTime() - new Date(a.inicio).getTime())[0];
 }
 
+// Componente publico: so decide se ha item selecionado. Uma troca de itemId
+// remonta OrganogramaCarregado (via key), que assim ja nasce com estado
+// limpo — sem precisar resetar via setState dentro de efeito.
 export default function Organograma({ area, itemId }: Props) {
+  if (!itemId) {
+    return (
+      <div className="flex flex-col items-center gap-0 rounded-lg border border-black/[.08] bg-white p-6 dark:border-white/[.145] dark:bg-zinc-950">
+        <p className="py-8 text-sm text-zinc-400">Nenhum item selecionado.</p>
+      </div>
+    );
+  }
+
+  return <OrganogramaCarregado key={itemId} area={area} itemId={itemId} />;
+}
+
+function OrganogramaCarregado({ area, itemId }: { area: Props["area"]; itemId: string }) {
   const [execucoes, setExecucoes] = useState<Execucao[]>([]);
   const [retrabalho, setRetrabalho] = useState(false);
   const ultimoRevisorProcessado = useRef<string | null>(null);
 
   useEffect(() => {
-    setExecucoes([]);
-    ultimoRevisorProcessado.current = null;
-    setRetrabalho(false);
-
-    if (!itemId) return;
-
     let ativo = true;
     const supabase = criarClienteNavegador();
 
@@ -113,9 +122,15 @@ export default function Organograma({ area, itemId }: Props) {
     const saida = ultimo.saida as { aprovado?: boolean } | null;
 
     if (saida?.aprovado === false) {
-      setRetrabalho(true);
-      const temporizador = setTimeout(() => setRetrabalho(false), 3000);
-      return () => clearTimeout(temporizador);
+      // setState roda dentro do callback do setTimeout (nao direto no corpo
+      // do efeito) para nao disparar um re-render em cascata na mesma
+      // atualizacao que trouxe a saida do revisor pelo Realtime.
+      const ligar = setTimeout(() => setRetrabalho(true), 0);
+      const desligar = setTimeout(() => setRetrabalho(false), 3000);
+      return () => {
+        clearTimeout(ligar);
+        clearTimeout(desligar);
+      };
     }
   }, [execucoes, area]);
 
@@ -130,39 +145,31 @@ export default function Organograma({ area, itemId }: Props) {
 
   return (
     <div className="flex flex-col items-center gap-0 rounded-lg border border-black/[.08] bg-white p-6 dark:border-white/[.145] dark:bg-zinc-950">
-      {!itemId ? (
-        <p className="py-8 text-sm text-zinc-400">Nenhum item selecionado.</p>
-      ) : (
-        <>
-          <CartaoAgente nome="orquestrador" execucao={execucaoOrquestrador} />
-          <div className="h-6 w-0.5 bg-zinc-300 dark:bg-zinc-700" />
-          <div className="flex justify-center gap-8 border-t-2 border-zinc-300 pt-6 dark:border-zinc-700">
-            {agentesDaArea.map((nomeAgente) => {
-              const destaque =
-                retrabalho && (nomeAgente === "redator" || nomeAgente === "revisor");
-              const stemClasse = destaque
-                ? "bg-red-500"
-                : "bg-zinc-300 dark:bg-zinc-700";
+      <CartaoAgente nome="orquestrador" execucao={execucaoOrquestrador} />
+      <div className="h-6 w-0.5 bg-zinc-300 dark:bg-zinc-700" />
+      <div className="flex justify-center gap-8 border-t-2 border-zinc-300 pt-6 dark:border-zinc-700">
+        {agentesDaArea.map((nomeAgente) => {
+          const destaque =
+            retrabalho && (nomeAgente === "redator" || nomeAgente === "revisor");
+          const stemClasse = destaque ? "bg-red-500" : "bg-zinc-300 dark:bg-zinc-700";
 
-              return (
-                <div key={nomeAgente} className="relative flex flex-col items-center">
-                  <div
-                    className={`absolute -top-6 h-6 w-0.5 transition-colors duration-300 ${stemClasse}`}
-                  />
-                  {nomeAgente === "investigador" && area === "financeiro" ? (
-                    <CartaoAgente nome={nomeAgente} contagem={contagemInvestigador} />
-                  ) : (
-                    <CartaoAgente
-                      nome={nomeAgente}
-                      execucao={ultimaExecucao(execucoes, nomeAgente)}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+          return (
+            <div key={nomeAgente} className="relative flex flex-col items-center">
+              <div
+                className={`absolute -top-6 h-6 w-0.5 transition-colors duration-300 ${stemClasse}`}
+              />
+              {nomeAgente === "investigador" && area === "financeiro" ? (
+                <CartaoAgente nome={nomeAgente} contagem={contagemInvestigador} />
+              ) : (
+                <CartaoAgente
+                  nome={nomeAgente}
+                  execucao={ultimaExecucao(execucoes, nomeAgente)}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

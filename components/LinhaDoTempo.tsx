@@ -22,20 +22,24 @@ type Props = {
   itemId: string | null;
 };
 
+// Componente publico: so decide se ha item selecionado. Uma troca de itemId
+// remonta LinhaDoTempoCarregada (via key), que assim ja nasce com estado
+// limpo — sem precisar resetar via setState dentro de efeito.
 export default function LinhaDoTempo({ itemId }: Props) {
+  if (!itemId) {
+    return <p className="text-sm text-zinc-400">Nenhum item selecionado.</p>;
+  }
+
+  return <LinhaDoTempoCarregada key={itemId} itemId={itemId} />;
+}
+
+function LinhaDoTempoCarregada({ itemId }: { itemId: string }) {
   const [execucoes, setExecucoes] = useState<Execucao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!itemId) {
-      setExecucoes([]);
-      setCarregando(false);
-      return;
-    }
-
     let ativo = true;
-    setCarregando(true);
     const supabase = criarClienteNavegador();
 
     supabase
@@ -54,10 +58,6 @@ export default function LinhaDoTempo({ itemId }: Props) {
       ativo = false;
     };
   }, [itemId]);
-
-  if (!itemId) {
-    return <p className="text-sm text-zinc-400">Nenhum item selecionado.</p>;
-  }
 
   if (carregando) {
     return <p className="text-sm text-zinc-400">Carregando...</p>;
